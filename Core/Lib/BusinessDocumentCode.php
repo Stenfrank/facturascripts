@@ -53,6 +53,7 @@ class BusinessDocumentCode
         $document->numero = static::getNewNumber($sequence, $document);
         $vars = [
             '{EJE}' => $document->codejercicio,
+            '{EJE2}' => \substr($document->codejercicio, -2),
             '{SERIE}' => $document->codserie,
             '{0SERIE}' => \str_pad($document->codserie, 2, '0', \STR_PAD_LEFT),
             '{NUM}' => $document->numero,
@@ -85,10 +86,10 @@ class BusinessDocumentCode
         /// find maximum number for this sequence data
         foreach ($previous as $lastDoc) {
             $lastNumber = (int) $lastDoc->numero;
-            if ($lastNumber >= $sequence->numero) {
+            if ($lastNumber >= $sequence->numero || $sequence->usarhuecos) {
                 $sequence->numero = $lastNumber + 1;
-                break;
             }
+            break;
         }
 
         /// use gaps?

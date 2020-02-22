@@ -20,6 +20,8 @@ namespace FacturaScripts\Core\Lib\Accounting;
 
 use FacturaScripts\Core\Base\DataBase;
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Dinamic\Lib\Import\CSVImport;
+use FacturaScripts\Dinamic\Model\CuentaEspecial;
 use FacturaScripts\Dinamic\Model\Ejercicio;
 use FacturaScripts\Dinamic\Model\FacturaCliente;
 use FacturaScripts\Dinamic\Model\FacturaProveedor;
@@ -94,19 +96,18 @@ class ClosingToAcounting
         $closing = $data['deleteClosing'] ?? true;
         $opening = $data['deleteOpening'] ?? true;
 
+        self::$dataBase->beginTransaction();
+
         try {
-            self::$dataBase->beginTransaction();
+            $exercise->estado = Ejercicio::EXERCISE_STATUS_OPEN;
+            $exercise->save();
 
             if ($opening && !$this->deleteOpening()) {
                 return false;
             }
 
-            if ($closing) {
-                if (!$this->deleteClosing() || !$this->deleteRegularization()) {
-                    return false;
-                }
-                $exercise->estado = Ejercicio::EXERCISE_STATUS_OPEN;
-                $exercise->save();
+            if ($closing && (!$this->deleteClosing() || !$this->deleteRegularization())) {
+                return false;
             }
 
             self::$dataBase->commit();
@@ -139,9 +140,11 @@ class ClosingToAcounting
         self::$dataBase->beginTransaction();
 
         try {
+            $this->updateSpecialAccounts();
+
             if ($this->execCloseInvoices() && $this->execRegularization() && $this->execClosing() && $this->execOpening()) {
-                $exercise->estado = Ejercicio::EXERCISE_STATUS_CLOSED;
-                $exercise->save();
+                $this->exercise->estado = Ejercicio::EXERCISE_STATUS_CLOSED;
+                $this->exercise->save();
                 self::$dataBase->commit();
             }
         } finally {
@@ -265,5 +268,16 @@ class ClosingToAcounting
     {
         $regularization = new AccountingClosingRegularization();
         return $regularization->exec($this->exercise, $this->journalClosing);
+    }
+
+    /**
+     * Update special accounts from data file.
+     */
+    protected function updateSpecialAccounts()
+    {
+        $sql = CSVImport::updateTableSQL(CuentaEspecial::tableName());
+        if (!empty($sql) && self::$dataBase->tableExists(CuentaEspecial::tableName())) {
+            self::$dataBase->exec($sql);
+        }
     }
 }

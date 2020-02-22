@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -51,7 +51,8 @@ class ListFacturaProveedor extends ListBusinessDocument
     protected function createViews()
     {
         $this->createViewPurchases('ListFacturaProveedor', 'FacturaProveedor', 'invoices');
-        $this->addFilterCheckbox('ListFacturaProveedor', 'pagada', 'unpaid', '', '!=');
+        $this->addFilterCheckbox('ListFacturaProveedor', 'pagada', 'unpaid', '', '=', false);
+        $this->addButtonLockInvoice('ListFacturaProveedor');
 
         $this->createViewLines('ListLineaFacturaProveedor', 'LineaFacturaProveedor');
         $this->createViewReceipts();

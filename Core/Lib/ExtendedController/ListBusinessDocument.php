@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,6 +19,7 @@
 namespace FacturaScripts\Core\Lib\ExtendedController;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Dinamic\Lib\BusinessDocumentGenerator;
 
 /**
  * Description of ListBusinessDocument
@@ -34,14 +35,21 @@ abstract class ListBusinessDocument extends ListController
      */
     protected function addButtonApproveDocument($viewName)
     {
-        $newButton = [
+        $this->addButton($viewName, [
+            'action' => 'approve-document-same-date',
+            'confirm' => 'true',
+            'icon' => 'fas fa-calendar-check',
+            'label' => 'approve-document-same-date',
+            'type' => 'action',
+        ]);
+
+        $this->addButton($viewName, [
             'action' => 'approve-document',
             'confirm' => 'true',
             'icon' => 'fas fa-check',
             'label' => 'approve-document',
             'type' => 'action',
-        ];
-        $this->addButton($viewName, $newButton);
+        ]);
     }
 
     /**
@@ -50,13 +58,27 @@ abstract class ListBusinessDocument extends ListController
      */
     protected function addButtonGroupDocument($viewName)
     {
-        $newButton = [
+        $this->addButton($viewName, [
             'action' => 'group-document',
             'icon' => 'fas fa-magic',
             'label' => 'group-or-split',
             'type' => 'action',
-        ];
-        $this->addButton($viewName, $newButton);
+        ]);
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function addButtonLockInvoice($viewName)
+    {
+        $this->addButton($viewName, [
+            'action' => 'lock-invoice',
+            'confirm' => 'true',
+            'icon' => 'fas fa-lock fa-fw',
+            'label' => 'lock-invoice',
+            'type' => 'action',
+        ]);
     }
 
     /**
@@ -119,6 +141,7 @@ abstract class ListBusinessDocument extends ListController
             return true;
         }
 
+        $this->dataBase->beginTransaction();
         foreach ($codes as $code) {
             if (!$model->loadFromCode($code)) {
                 $this->toolBox()->i18nLog()->error('record-not-found');
@@ -133,12 +156,14 @@ abstract class ListBusinessDocument extends ListController
                 $model->idestado = $status->idestado;
                 if (!$model->save()) {
                     $this->toolBox()->i18nLog()->error('record-save-error');
+                    $this->dataBase->rollback();
                     return true;
                 }
             }
         }
 
         $this->toolBox()->i18nLog()->notice('record-updated-correctly');
+        $this->dataBase->commit();
         $model->clear();
         return true;
     }
@@ -189,7 +214,7 @@ abstract class ListBusinessDocument extends ListController
         $this->addOrderBy($viewName, ['fecha', 'hora', 'codigo'], 'date', 2);
         $this->addOrderBy($viewName, ['numero'], 'number');
         $this->addOrderBy($viewName, ['numproveedor'], 'numsupplier');
-        $this->addOrderBy($viewName, ['total'], 'amount');
+        $this->addOrderBy($viewName, ['total'], 'total');
 
         /// filters
         $this->addCommonViewFilters($viewName, $model);
@@ -211,7 +236,7 @@ abstract class ListBusinessDocument extends ListController
         $this->addOrderBy($viewName, ['fecha', 'codigo'], 'date', 2);
         $this->addOrderBy($viewName, ['numero'], 'number');
         $this->addOrderBy($viewName, ['numero2'], 'number2');
-        $this->addOrderBy($viewName, ['total'], 'amount');
+        $this->addOrderBy($viewName, ['total'], 'total');
 
         /// filters
         $this->addCommonViewFilters($viewName, $model);
@@ -240,8 +265,15 @@ abstract class ListBusinessDocument extends ListController
             case 'approve-document':
                 return $this->approveDocumentAction();
 
+            case 'approve-document-same-date':
+                BusinessDocumentGenerator::setSameDate(true);
+                return $this->approveDocumentAction();
+
             case 'group-document':
                 return $this->groupDocumentAction();
+
+            case 'lock-invoice':
+                return $this->lockInvoiceAction();
 
             case 'paid':
                 return $this->paidAction();
@@ -275,6 +307,51 @@ abstract class ListBusinessDocument extends ListController
      * 
      * @return bool
      */
+    protected function lockInvoiceAction()
+    {
+        if (!$this->permissions->allowUpdate) {
+            $this->toolBox()->i18nLog()->warning('not-allowed-modify');
+            return true;
+        }
+
+        $codes = $this->request->request->get('code');
+        $model = $this->views[$this->active]->model;
+        if (!is_array($codes) || empty($model)) {
+            $this->toolBox()->i18nLog()->warning('no-selected-item');
+            return true;
+        }
+
+        $this->dataBase->beginTransaction();
+        foreach ($codes as $code) {
+            if (!$model->loadFromCode($code)) {
+                $this->toolBox()->i18nLog()->error('record-not-found');
+                continue;
+            }
+
+            foreach ($model->getAvaliableStatus() as $status) {
+                if ($status->editable) {
+                    continue;
+                }
+
+                $model->idestado = $status->idestado;
+                if (!$model->save()) {
+                    $this->toolBox()->i18nLog()->error('record-save-error');
+                    $this->dataBase->rollback();
+                    return true;
+                }
+            }
+        }
+
+        $this->toolBox()->i18nLog()->notice('record-updated-correctly');
+        $this->dataBase->commit();
+        $model->clear();
+        return true;
+    }
+
+    /**
+     * 
+     * @return bool
+     */
     protected function paidAction()
     {
         if (!$this->permissions->allowUpdate) {
@@ -289,6 +366,7 @@ abstract class ListBusinessDocument extends ListController
             return true;
         }
 
+        $this->dataBase->beginTransaction();
         foreach ($codes as $code) {
             if (!$model->loadFromCode($code)) {
                 $this->toolBox()->i18nLog()->error('record-not-found');
@@ -299,11 +377,13 @@ abstract class ListBusinessDocument extends ListController
             $model->pagado = true;
             if (!$model->save()) {
                 $this->toolBox()->i18nLog()->error('record-save-error');
+                $this->dataBase->rollback();
                 return true;
             }
         }
 
         $this->toolBox()->i18nLog()->notice('record-updated-correctly');
+        $this->dataBase->commit();
         $model->clear();
         return true;
     }

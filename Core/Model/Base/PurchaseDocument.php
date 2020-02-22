@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,9 +18,12 @@
  */
 namespace FacturaScripts\Core\Model\Base;
 
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Dinamic\Model\Divisa;
+use FacturaScripts\Dinamic\Model\ProductoProveedor;
 use FacturaScripts\Dinamic\Model\Proveedor;
 use FacturaScripts\Dinamic\Model\User;
+use FacturaScripts\Dinamic\Model\Variante;
 
 /**
  * Description of PurchaseDocument
@@ -62,6 +65,42 @@ abstract class PurchaseDocument extends TransformerDocument
             $this->coddivisa = $divisa->coddivisa;
             $this->tasaconv = $divisa->tasaconvcompra;
         }
+    }
+
+    /**
+     * Returns a new document line with the data of the product. Finds product
+     * by reference or barcode.
+     *
+     * @param string $reference
+     *
+     * @return BusinessDocumentLine
+     */
+    public function getNewProductLine($reference)
+    {
+        $newLine = $this->getNewLine();
+
+        $variant = new Variante();
+        $where1 = [new DataBaseWhere('referencia', $this->toolBox()->utils()->noHtml($reference))];
+        $where2 = [new DataBaseWhere('codbarras', $this->toolBox()->utils()->noHtml($reference))];
+        if ($variant->loadFromCode('', $where1) || $variant->loadFromCode('', $where2)) {
+            $product = $variant->getProducto();
+            $impuesto = $product->getImpuesto();
+
+            $newLine->codimpuesto = $impuesto->codimpuesto;
+            $newLine->descripcion = $variant->description();
+            $newLine->idproducto = $product->idproducto;
+            $newLine->iva = $impuesto->iva;
+            $newLine->pvpunitario = $variant->coste;
+            $newLine->recargo = $impuesto->recargo;
+            $newLine->referencia = $variant->referencia;
+
+            $this->setLastSupplierPrice($newLine);
+
+            /// allow extensions
+            $this->pipe('getNewProductLine', $newLine, $variant, $product);
+        }
+
+        return $newLine;
     }
 
     /**
@@ -180,6 +219,25 @@ abstract class PurchaseDocument extends TransformerDocument
         }
 
         return $this->setSubject($proveedor);
+    }
+
+    /**
+     * Sets the last price and discounts from this supplier.
+     * 
+     * @param BusinessDocumentLine $newLine
+     */
+    protected function setLastSupplierPrice(&$newLine)
+    {
+        $supplierProd = new ProductoProveedor();
+        $where = [
+            new DataBaseWhere('codproveedor', $this->codproveedor),
+            new DataBaseWhere('referencia', $newLine->referencia)
+        ];
+        if ($supplierProd->loadFromCode('', $where)) {
+            $newLine->dtopor = $supplierProd->dtopor;
+            $newLine->dtopor2 = $supplierProd->dtopor2;
+            $newLine->pvpunitario = $supplierProd->precio;
+        }
     }
 
     /**

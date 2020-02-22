@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -22,7 +22,11 @@ use Exception;
 use FacturaScripts\Core\Base\DataBase;
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Core\Base\ToolBox;
-use FacturaScripts\Dinamic\Model;
+use FacturaScripts\Dinamic\Lib\Import\CSVImport;
+use FacturaScripts\Dinamic\Model\Cuenta;
+use FacturaScripts\Dinamic\Model\CuentaEspecial;
+use FacturaScripts\Dinamic\Model\Ejercicio;
+use FacturaScripts\Dinamic\Model\Subcuenta;
 use ParseCsv\Csv;
 use SimpleXMLElement;
 
@@ -44,14 +48,14 @@ class AccountingPlanImport
     /**
      * Exercise related to the accounting plan.
      *
-     * @var Model\Ejercicio
+     * @var Ejercicio
      */
-    protected $ejercicio;
+    protected $exercise;
 
     public function __construct()
     {
         $this->dataBase = new DataBase();
-        $this->ejercicio = new Model\Ejercicio();
+        $this->exercise = new Ejercicio();
     }
 
     /**
@@ -64,7 +68,7 @@ class AccountingPlanImport
      */
     public function importCSV(string $filePath, string $codejercicio)
     {
-        if (!$this->ejercicio->loadFromCode($codejercicio)) {
+        if (!$this->exercise->loadFromCode($codejercicio)) {
             $this->toolBox()->i18nLog()->error('exercise-not-found');
             return false;
         }
@@ -79,8 +83,8 @@ class AccountingPlanImport
         $return = true;
 
         try {
+            $this->updateSpecialAccounts();
             $this->processCsvData($filePath);
-            $this->updateExercise();
 
             // confirm data
             $this->dataBase->commit();
@@ -106,13 +110,13 @@ class AccountingPlanImport
      */
     public function importXML(string $filePath, string $codejercicio)
     {
-        if (!$this->ejercicio->loadFromCode($codejercicio)) {
+        if (!$this->exercise->loadFromCode($codejercicio)) {
             $this->toolBox()->i18nLog()->error('exercise-not-found');
             return false;
         }
 
         $data = $this->getData($filePath);
-        if (is_array($data) || $data->count() == 0) {
+        if (\is_array($data) || $data->count() == 0) {
             return false;
         }
 
@@ -121,11 +125,11 @@ class AccountingPlanImport
         $return = true;
 
         try {
+            $this->updateSpecialAccounts();
             $this->importEpigrafeGroup($data->grupo_epigrafes);
             $this->importEpigrafe($data->epigrafe);
             $this->importCuenta($data->cuenta);
             $this->importSubcuenta($data->subcuenta);
-            $this->updateExercise();
 
             // confirm data
             $this->dataBase->commit();
@@ -153,37 +157,22 @@ class AccountingPlanImport
      */
     protected function createAccount(string $code, string $definition, string $parentCode = '', string $codcuentaesp = '')
     {
-        $account = new Model\Cuenta();
-        $account->disableAditionalTest();
+        $account = new Cuenta();
 
         /// the account exists?
         $where = [
-            new DataBaseWhere('codejercicio', $this->ejercicio->codejercicio),
+            new DataBaseWhere('codejercicio', $this->exercise->codejercicio),
             new DataBaseWhere('codcuenta', $code)
         ];
         if ($account->loadFromCode('', $where)) {
             return true;
         }
 
-        if (!empty($parentCode)) {
-            $whereParent = [
-                new DataBaseWhere('codejercicio', $this->ejercicio->codejercicio),
-                new DataBaseWhere('codcuenta', $parentCode)
-            ];
-            $parent = new Model\Cuenta();
-            if (!$parent->loadFromCode('', $whereParent)) {
-                $this->toolBox()->i18nLog()->error('parent-error');
-                return false;
-            }
-
-            $account->parent_codcuenta = $parent->codcuenta;
-            $account->parent_idcuenta = $parent->idcuenta;
-        }
-
-        $account->codejercicio = $this->ejercicio->codejercicio;
         $account->codcuenta = $code;
         $account->codcuentaesp = empty($codcuentaesp) ? null : $codcuentaesp;
+        $account->codejercicio = $this->exercise->codejercicio;
         $account->descripcion = $definition;
+        $account->parent_codcuenta = empty($parentCode) ? null : $parentCode;
         return $account->save();
     }
 
@@ -199,34 +188,27 @@ class AccountingPlanImport
      */
     protected function createSubaccount(string $code, string $description, string $parentCode, string $codcuentaesp = '')
     {
-        $subaccount = new Model\Subcuenta();
-        $subaccount->disableAditionalTest();
+        $subaccount = new Subcuenta();
 
         /// the subaccount exists?
         $where = [
-            new DataBaseWhere('codejercicio', $this->ejercicio->codejercicio),
+            new DataBaseWhere('codejercicio', $this->exercise->codejercicio),
             new DataBaseWhere('codsubcuenta', $code)
         ];
         if ($subaccount->loadFromCode('', $where)) {
             return true;
         }
 
-        $account = new Model\Cuenta();
-        $whereAccount = [
-            new DataBaseWhere('codejercicio', $this->ejercicio->codejercicio),
-            new DataBaseWhere('codcuenta', $parentCode)
-        ];
-
-        /// the account exist?
-        if (!$account->loadFromCode('', $whereAccount)) {
-            $this->toolBox()->i18nLog()->error('error', ['%error%' => 'account "' . $parentCode . '" not found']);
-            return false;
+        /// update exercise configuration
+        if ($this->exercise->longsubcuenta != \strlen($code)) {
+            $this->exercise->longsubcuenta = \strlen($code);
+            $this->exercise->save();
+            $subaccount->clearExerciseCache();
         }
 
-        $subaccount->codejercicio = $this->ejercicio->codejercicio;
-        $subaccount->idcuenta = $account->idcuenta;
-        $subaccount->codcuenta = $account->codcuenta;
+        $subaccount->codcuenta = $parentCode;
         $subaccount->codcuentaesp = empty($codcuentaesp) ? null : $codcuentaesp;
+        $subaccount->codejercicio = $this->exercise->codejercicio;
         $subaccount->codsubcuenta = $code;
         $subaccount->descripcion = $description;
         return $subaccount->save();
@@ -241,8 +223,8 @@ class AccountingPlanImport
      */
     protected function getData(string $filePath)
     {
-        if (file_exists($filePath)) {
-            return simplexml_load_string(file_get_contents($filePath));
+        if (\file_exists($filePath)) {
+            return \simplexml_load_string(\file_get_contents($filePath));
         }
 
         return [];
@@ -257,7 +239,7 @@ class AccountingPlanImport
     {
         foreach ($data as $xmlAccount) {
             $accountElement = (array) $xmlAccount;
-            $this->createAccount($accountElement['codcuenta'], base64_decode($accountElement['descripcion']), $accountElement['codepigrafe'], $accountElement['idcuentaesp']);
+            $this->createAccount($accountElement['codcuenta'], \base64_decode($accountElement['descripcion']), $accountElement['codepigrafe'], $accountElement['idcuentaesp']);
         }
     }
 
@@ -270,7 +252,7 @@ class AccountingPlanImport
     {
         foreach ($data as $xmlEpigrafeElement) {
             $epigrafeElement = (array) $xmlEpigrafeElement;
-            $this->createAccount($epigrafeElement['codepigrafe'], base64_decode($epigrafeElement['descripcion']), $epigrafeElement['codgrupo']);
+            $this->createAccount($epigrafeElement['codepigrafe'], \base64_decode($epigrafeElement['descripcion']), $epigrafeElement['codgrupo']);
         }
     }
 
@@ -283,7 +265,7 @@ class AccountingPlanImport
     {
         foreach ($data as $xmlEpigrafeGroup) {
             $epigrafeGroupElement = (array) $xmlEpigrafeGroup;
-            $this->createAccount($epigrafeGroupElement['codgrupo'], base64_decode($epigrafeGroupElement['descripcion']));
+            $this->createAccount($epigrafeGroupElement['codgrupo'], \base64_decode($epigrafeGroupElement['descripcion']));
         }
     }
 
@@ -296,7 +278,7 @@ class AccountingPlanImport
     {
         foreach ($data as $xmlSubaccountElement) {
             $subaccountElement = (array) $xmlSubaccountElement;
-            $this->createSubaccount($subaccountElement['codsubcuenta'], base64_decode($subaccountElement['descripcion']), $subaccountElement['codcuenta']);
+            $this->createSubaccount($subaccountElement['codsubcuenta'], \base64_decode($subaccountElement['descripcion']), $subaccountElement['codcuenta']);
         }
     }
 
@@ -314,25 +296,25 @@ class AccountingPlanImport
         $accountPlan = [];
         foreach ($csv->data as $value) {
             $key = $value[$csv->titles[0]];
-            if (strlen($key) > 0) {
+            if (\strlen($key) > 0) {
                 $code = $value[$csv->titles[0]];
                 $accountPlan[$code] = [
                     'descripcion' => $value[$csv->titles[1]],
                     'codcuentaesp' => $value[$csv->titles[2]]
                 ];
-                $length[] = strlen($code);
+                $length[] = \strlen($code);
             }
         }
 
-        $lengths = array_unique($length);
-        sort($lengths);
-        $minLength = min($lengths);
-        $maxLength = max($lengths);
-        $keys = array_keys($accountPlan);
-        ksort($accountPlan);
+        $lengths = \array_unique($length);
+        \sort($lengths);
+        $minLength = \min($lengths);
+        $maxLength = \max($lengths);
+        $keys = \array_keys($accountPlan);
+        \ksort($accountPlan);
 
         foreach ($accountPlan as $key => $value) {
-            switch (strlen($key)) {
+            switch (\strlen($key)) {
                 case $minLength:
                     $this->createAccount($key, $value['descripcion'], '', $value['codcuentaesp']);
                     break;
@@ -365,7 +347,7 @@ class AccountingPlanImport
             $strCode = (string) $code;
             if ($strCode === $account) {
                 continue;
-            } elseif (strpos($account, $strCode) === 0 && strlen($strCode) > strlen($parentCode)) {
+            } elseif (\strpos($account, $strCode) === 0 && \strlen($strCode) > \strlen($parentCode)) {
                 $parentCode = $code;
             }
         }
@@ -383,16 +365,13 @@ class AccountingPlanImport
     }
 
     /**
-     * Updated exercise subaccount length.
+     * Update special accounts from data file.
      */
-    protected function updateExercise()
+    protected function updateSpecialAccounts()
     {
-        $subAccountModel = new Model\Subcuenta();
-        $where = [new DataBaseWhere('codejercicio', $this->ejercicio->codejercicio)];
-        foreach ($subAccountModel->all($where) as $subAccount) {
-            $this->ejercicio->longsubcuenta = strlen($subAccount->codsubcuenta);
-            $this->ejercicio->save();
-            break;
+        $sql = CSVImport::updateTableSQL(CuentaEspecial::tableName());
+        if (!empty($sql) && $this->dataBase->tableExists(CuentaEspecial::tableName())) {
+            $this->dataBase->exec($sql);
         }
     }
 }

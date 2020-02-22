@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -32,7 +32,7 @@ class BusinessDocumentGenerator
 {
 
     /**
-     * Exclude fields
+     * Dcoument fields to exclude.
      *
      * @var array
      */
@@ -43,10 +43,23 @@ class BusinessDocumentGenerator
     ];
 
     /**
+     * Line fields to exclude.
+     *
+     * @var array
+     */
+    public $excludeLineFields = ['idlinea', 'orden'];
+
+    /**
      *
      * @var array
      */
     protected $lastDocs = [];
+
+    /**
+     *
+     * @var bool
+     */
+    private static $sameDate = false;
 
     /**
      * Generates a new document from a prototype document.
@@ -66,14 +79,19 @@ class BusinessDocumentGenerator
 
         $newDocClass = '\\FacturaScripts\\Dinamic\\Model\\' . $newClass;
         $newDoc = new $newDocClass();
-        foreach (array_keys($prototype->getModelFields()) as $field) {
+        foreach (\array_keys($prototype->getModelFields()) as $field) {
             /// exclude some properties
-            if (in_array($field, $this->excludeFields)) {
+            if (\in_array($field, $this->excludeFields)) {
                 continue;
             }
 
             /// copy properties to new document
             $newDoc->{$field} = $prototype->{$field};
+        }
+
+        if (self::$sameDate) {
+            $newDoc->fecha = $prototype->fecha;
+            $newDoc->hora = $prototype->hora;
         }
 
         foreach ($properties as $key => $value) {
@@ -109,6 +127,15 @@ class BusinessDocumentGenerator
     }
 
     /**
+     * 
+     * @param bool $value
+     */
+    public static function setSameDate(bool $value)
+    {
+        self::$sameDate = $value;
+    }
+
+    /**
      * Clone the lines from the prototype document, to new document.
      *
      * @param BusinessDocument       $prototype
@@ -124,8 +151,8 @@ class BusinessDocumentGenerator
         foreach ($lines as $line) {
             /// copy line properties to new line
             $arrayLine = [];
-            foreach (array_keys($line->getModelFields()) as $field) {
-                if ($field !== 'idlinea') {
+            foreach (\array_keys($line->getModelFields()) as $field) {
+                if (\in_array($field, $this->excludeLineFields) === false) {
                     $arrayLine[$field] = $line->{$field};
                 }
             }
@@ -134,7 +161,7 @@ class BusinessDocumentGenerator
                 $arrayLine['cantidad'] = $quantity[$line->primaryColumnValue()];
             }
 
-            if ($arrayLine['cantidad'] == 0 && $line->cantidad != 0) {
+            if (empty($arrayLine['cantidad']) && !empty($line->cantidad)) {
                 continue;
             }
 

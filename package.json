@@ -21,9 +21,9 @@
   "author": "Carlos García Gómez",
   "license": "LGPL-3.0",
   "bugs": {
-    "url": "https://www.facturascripts.com/contacto"
+    "url": "https://facturascripts.com/contacto"
   },
-  "homepage": "https://www.facturascripts.com",
+  "homepage": "https://facturascripts.com",
   "dependencies": {
     "@fortawesome/fontawesome-free": "^5.12.0",
     "bootbox": "^5.4.0",
@@ -33,6 +33,6 @@
     "jquery": "^3.4.1",
     "jquery-ui-dist": "^1.12.x",
     "pace-js": "^1.0.2",
-    "popper.js": "^1.16.0"
+    "popper.js": "^1.16.1"
   }
 }

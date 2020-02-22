@@ -24,6 +24,7 @@ use FacturaScripts\Core\Base\ToolBox;
 use FacturaScripts\Dinamic\Model\Asiento;
 use FacturaScripts\Dinamic\Model\Ejercicio;
 use FacturaScripts\Dinamic\Model\Partida;
+use FacturaScripts\Dinamic\Model\Subcuenta;
 
 /**
  * Description of AccountingClossing
@@ -46,6 +47,13 @@ abstract class AccountingClosingBase
      * @var Ejercicio
      */
     protected $exercise;
+
+    /**
+     * Sub account for special process
+     *
+     * @var Subcuenta
+     */
+    protected $subAccount;
 
     /**
      * Get the concept for the accounting entry and its lines.
@@ -78,7 +86,7 @@ abstract class AccountingClosingBase
      */
     public function __construct()
     {
-        if (self::$dataBase === null) {
+        if (!isset(self::$dataBase)) {
             self::$dataBase = new DataBase();
         }
     }
@@ -132,8 +140,9 @@ abstract class AccountingClosingBase
         ];
 
         $accountEntry = new Asiento();
+        $accountEntry->clearExerciseCache();
         foreach ($accountEntry->all($where) as $row) {
-            $row->setDeleteTest(false);
+            $row->editable = true;
             if (!$row->delete()) {
                 return false;
             }
@@ -189,7 +198,7 @@ abstract class AccountingClosingBase
             . " AND (t1.operacion IS NULL OR t1.operacion <> '" . $this->getOperationFilter() . "')"
             . " GROUP BY 1, 2, 3"
             . " HAVING ROUND(SUM(t2.debe) - SUM(t2.haber), 4) <> 0.0000"
-            . " ORDER BY 1, 2, 3";
+            . " ORDER BY 1, 3, 2";
     }
 
     /**
@@ -209,6 +218,26 @@ abstract class AccountingClosingBase
             . "t2.codsubcuenta AS code,"
             . "ROUND(SUM(t2.debe), 4) AS debit,"
             . "ROUND(SUM(t2.haber), 4) AS credit";
+    }
+
+    /**
+     * Search and load data account from a special account code
+     *
+     * @param Ejercicio $exercise
+     * @param string    $specialAccount
+     *
+     * @return bool
+     */
+    protected function loadSubAccount($exercise, string $specialAccount): bool
+    {
+        $accounting = new AccountingAccounts();
+        $accounting->exercise = $exercise;
+        $this->subAccount = $accounting->getSpecialSubAccount($specialAccount);
+        if (empty($this->subAccount->idsubcuenta)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -236,7 +265,6 @@ abstract class AccountingClosingBase
     protected function setData(&$entry)
     {
         $entry->codejercicio = $this->exercise->codejercicio;
-        $entry->editable = false;
         $entry->idempresa = $this->exercise->idempresa;
         $entry->importe = 0.00;
 
@@ -253,10 +281,7 @@ abstract class AccountingClosingBase
      */
     protected function setDataLine(&$line, $data)
     {
-        $line->idcontrapartida = null;
-        $line->idpartida = null; // Force insert new line
         $line->idsubcuenta = $data['id'];
-        $line->codcontrapartida = null;
         $line->codsubcuenta = $data['code'];
         $line->concepto = $this->getConcept();
         $line->debe = 0.00;

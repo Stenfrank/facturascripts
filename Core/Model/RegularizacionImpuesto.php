@@ -18,7 +18,12 @@
  */
 namespace FacturaScripts\Core\Model;
 
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Dinamic\Lib\Accounting\AccountingAccounts;
+use FacturaScripts\Dinamic\Model\Asiento as DinAsiento;
+use FacturaScripts\Dinamic\Model\Ejercicio as DinEjercicio;
+use FacturaScripts\Dinamic\Model\Partida as DinPartida;
+use FacturaScripts\Dinamic\Model\Subcuenta as DinSubcuenta;
 
 /**
  * A VAT regularization.
@@ -30,13 +35,7 @@ class RegularizacionImpuesto extends Base\ModelClass
 {
 
     use Base\ModelTrait;
-
-    /**
-     * Exercise code.
-     *
-     * @var string
-     */
-    public $codejercicio;
+    use Base\ExerciseRelationTrait;
 
     /**
      * Code, not ID, of the related sub-account.
@@ -136,56 +135,23 @@ class RegularizacionImpuesto extends Base\ModelClass
 
     /**
      *
-     * @return Asiento
+     * @return DinAsiento
      */
     public function getAsiento()
     {
-        $asiento = new Asiento();
+        $asiento = new DinAsiento();
         $asiento->loadFromCode($this->idasiento);
         return $asiento;
     }
 
     /**
-     * 
-     * @return Ejercicio
-     */
-    public function getEjercicio()
-    {
-        $ejercicio = new Ejercicio();
-        $ejercicio->loadFromCode($this->codejercicio);
-        return $ejercicio;
-    }
-
-    /**
-     * Returns the VAT regularization corresponding to that date,
-     * that is, the regularization whose start date is earlier
-     * to the date provided and its end date is after the date
-     * provided. So you can know if the period is still open to be able
-     * check in.
-     *
-     * @param string $fecha
-     *
-     * @return bool|RegularizacionImpuesto
-     */
-    public function getFechaInside($fecha)
-    {
-        $sql = 'SELECT * FROM ' . static::tableName()
-            . ' WHERE fechainicio <= ' . self::$dataBase->var2str($fecha)
-            . ' AND fechafin >= ' . self::$dataBase->var2str($fecha) . ';';
-
-        $data = self::$dataBase->select($sql);
-        return empty($data) ? false : new static($data[0]);
-    }
-
-    /**
      * Returns the items per accounting entry.
      *
-     * @return Partida[]
+     * @return DinPartida[]
      */
     public function getPartidas()
     {
-        $asiento = $this->getAsiento();
-        return $asiento->getLines();
+        return $this->getAsiento()->getLines();
     }
 
     /**
@@ -198,11 +164,26 @@ class RegularizacionImpuesto extends Base\ModelClass
     public function install()
     {
         /// needed dependencies
-        new Ejercicio();
-        new Subcuenta();
-        new Asiento();
+        new DinEjercicio();
+        new DinSubcuenta();
+        new DinAsiento();
 
         return parent::install();
+    }
+
+    /**
+     * 
+     * @param string $fecha
+     *
+     * @return bool
+     */
+    public function loadFechaInside($fecha): bool
+    {
+        $where = [
+            new DataBaseWhere('fechainicio', $fecha, '<='),
+            new DataBaseWhere('fechafin', $fecha, '>=')
+        ];
+        return $this->loadFromCode('', $where);
     }
 
     /**
@@ -249,7 +230,7 @@ class RegularizacionImpuesto extends Base\ModelClass
         $this->fechafin = $period['end'];
 
         if (empty($this->idempresa)) {
-            $this->idempresa = $this->getEjercicio()->idempresa;
+            $this->idempresa = $this->getExercise()->idempresa;
         }
 
         if (empty($this->codsubcuentaacr) || empty($this->codsubcuentadeu)) {
@@ -281,7 +262,7 @@ class RegularizacionImpuesto extends Base\ModelClass
     private function getPeriod($period): array
     {
         /// Calculate year
-        $year = \date('Y', strtotime($this->getEjercicio()->fechainicio));
+        $year = \date('Y', \strtotime($this->getExercise()->fechainicio));
 
         // return periods values
         switch ($period) {
@@ -302,7 +283,7 @@ class RegularizacionImpuesto extends Base\ModelClass
     protected function setDefaultAccounts()
     {
         $accounts = new AccountingAccounts();
-        $accounts->exercise = $this->getEjercicio();
+        $accounts->exercise = $this->getExercise();
 
         $subcuentaacr = $accounts->getSpecialSubAccount('IVAACR');
         $this->codsubcuentaacr = $subcuentaacr->codsubcuenta;

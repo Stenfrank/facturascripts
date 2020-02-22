@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,14 +18,11 @@
  */
 namespace FacturaScripts\Core\Model\Base;
 
-use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Dinamic\Lib\BusinessDocumentCode;
 use FacturaScripts\Dinamic\Model\Almacen;
 use FacturaScripts\Dinamic\Model\Ejercicio;
 use FacturaScripts\Dinamic\Model\Empresa;
 use FacturaScripts\Dinamic\Model\Serie;
-use FacturaScripts\Dinamic\Model\Tarifa;
-use FacturaScripts\Dinamic\Model\Variante;
 
 /**
  * Description of BusinessDocument
@@ -169,12 +166,6 @@ abstract class BusinessDocument extends ModelOnChangeClass
     public $observaciones;
 
     /**
-     *
-     * @var Tarifa
-     */
-    protected $tarifa;
-
-    /**
      * Rate of conversion to Euros of the selected currency.
      *
      * @var float|int
@@ -229,6 +220,11 @@ abstract class BusinessDocument extends ModelOnChangeClass
     abstract public function getNewLine(array $data = [], array $exclude = []);
 
     /**
+     * Returns a new line for this business document completed with the product data.
+     */
+    abstract public function getNewProductLine($reference);
+
+    /**
      * Returns the subject of this document.
      */
     abstract public function getSubject();
@@ -266,8 +262,8 @@ abstract class BusinessDocument extends ModelOnChangeClass
         $this->codserie = $appSettings->get('default', 'codserie');
         $this->dtopor1 = 0.0;
         $this->dtopor2 = 0.0;
-        $this->fecha = date(self::DATE_STYLE);
-        $this->hora = date(self::HOUR_STYLE);
+        $this->fecha = \date(self::DATE_STYLE);
+        $this->hora = \date(self::HOUR_STYLE);
         $this->idempresa = $appSettings->get('default', 'idempresa');
         $this->irpf = 0.0;
         $this->neto = 0.0;
@@ -288,40 +284,6 @@ abstract class BusinessDocument extends ModelOnChangeClass
         $empresa = new Empresa();
         $empresa->loadFromCode($this->idempresa);
         return $empresa;
-    }
-
-    /**
-     * Returns a new document line with the data of the product. Finds product
-     * by reference or barcode.
-     *
-     * @param string $reference
-     *
-     * @return BusinessDocumentLine
-     */
-    public function getNewProductLine($reference)
-    {
-        $newLine = $this->getNewLine();
-
-        $variant = new Variante();
-        $where1 = [new DataBaseWhere('referencia', $this->toolBox()->utils()->noHtml($reference))];
-        $where2 = [new DataBaseWhere('codbarras', $this->toolBox()->utils()->noHtml($reference))];
-        if ($variant->loadFromCode('', $where1) || $variant->loadFromCode('', $where2)) {
-            $product = $variant->getProducto();
-            $impuesto = $product->getImpuesto();
-
-            $newLine->codimpuesto = $impuesto->codimpuesto;
-            $newLine->descripcion = $variant->description();
-            $newLine->idproducto = $product->idproducto;
-            $newLine->iva = $impuesto->iva;
-            $newLine->pvpunitario = isset($this->tarifa) ? $this->tarifa->apply($variant->coste, $variant->precio) : $variant->precio;
-            $newLine->recargo = $impuesto->recargo;
-            $newLine->referencia = $variant->referencia;
-
-            /// allow extensions
-            $this->pipe('getNewProductLine', $newLine, $variant, $product);
-        }
-
-        return $newLine;
     }
 
     /**
@@ -458,13 +420,18 @@ abstract class BusinessDocument extends ModelOnChangeClass
                 $this->toolBox()->i18nLog()->warning('non-editable-columns', ['%columns%' => 'codalmacen,idempresa']);
                 return false;
 
-            case 'codejercicio':
             case 'codserie':
                 BusinessDocumentCode::getNewCode($this);
                 break;
 
             case 'fecha':
-                return $this->setDate($this->fecha, $this->hora);
+                $oldCodejercicio = $this->codejercicio;
+                if (!$this->setDate($this->fecha, $this->hora)) {
+                    return false;
+                } elseif ($this->codejercicio != $oldCodejercicio) {
+                    BusinessDocumentCode::getNewCode($this);
+                }
+                break;
         }
 
         return parent::onChange($field);
@@ -478,7 +445,7 @@ abstract class BusinessDocument extends ModelOnChangeClass
     protected function setPreviousData(array $fields = [])
     {
         $more = [
-            'codalmacen', 'coddivisa', 'codejercicio', 'codpago', 'codserie',
+            'codalmacen', 'coddivisa', 'codpago', 'codserie',
             'fecha', 'hora', 'idempresa', 'total'
         ];
         parent::setPreviousData(array_merge($more, $fields));

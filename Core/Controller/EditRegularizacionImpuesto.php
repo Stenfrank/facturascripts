@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -170,12 +170,12 @@ class EditRegularizacionImpuesto extends EditController
      */
     protected function createAccountingEntry($code)
     {
-        $document = new RegularizacionImpuesto();
-        if ($document->loadFromCode($code) && empty($document->idasiento)) {
+        $reg = new RegularizacionImpuesto();
+        if ($reg->loadFromCode($code) && empty($reg->idasiento)) {
             $accounting = new VatRegularizationToAccounting();
-            $accounting->generate($document);
-            if (!empty($document->idasiento)) {
-                $document->save();
+            $accounting->generate($reg);
+            if (!empty($reg->idasiento)) {
+                $reg->save();
             }
         }
     }
@@ -329,6 +329,7 @@ class EditRegularizacionImpuesto extends EditController
 
             case 'ListPartidaImpuestoResumen':
                 $this->getListPartidaImpuestoResumen($view);
+                $this->setCreateAcEntryButton();
                 break;
 
             case 'ListPartidaImpuesto-1':
@@ -338,6 +339,21 @@ class EditRegularizacionImpuesto extends EditController
             case 'ListPartidaImpuesto-2':
                 $this->getListPartidaImpuesto($view, SubAccountTools::SPECIAL_GROUP_TAX_OUTPUT);
                 break;
+        }
+    }
+
+    protected function setCreateAcEntryButton()
+    {
+        $idasiento = $this->getViewModelValue('EditRegularizacionImpuesto', 'idasiento');
+        if (empty($idasiento)) {
+            $this->addButton('ListPartidaImpuestoResumen', [
+                'action' => 'create-accounting-entry',
+                'color' => 'success',
+                'confirm' => true,
+                'icon' => 'fas fa-balance-scale',
+                'label' => 'create-accounting-entry',
+                'row' => 'actions'
+            ]);
         }
     }
 
