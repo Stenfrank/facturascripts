@@ -29,6 +29,7 @@ use FacturaScripts\Dinamic\Model\ModelView\SalesDocLineAccount;
 use FacturaScripts\Dinamic\Model\Proveedor;
 use FacturaScripts\Dinamic\Model\Retencion;
 use FacturaScripts\Dinamic\Model\Serie;
+use FacturaScripts\Dinamic\Model\Subcuenta;
 
 /**
  * Class for the generation of accounting entries of a sale/purchase document
@@ -39,6 +40,18 @@ use FacturaScripts\Dinamic\Model\Serie;
  */
 class InvoiceToAccounting extends AccountingClass
 {
+
+    /**
+     *
+     * @var Subcuenta
+     */
+    protected $counterpart;
+
+    /**
+     *
+     * @var FacturaCliente|FacturaProveedor
+     */
+    protected $document;
 
     /**
      * Document Subtotals Lines array
@@ -82,15 +95,18 @@ class InvoiceToAccounting extends AccountingClass
         $customer = new Cliente();
         if (!$customer->loadFromCode($this->document->codcliente)) {
             $this->toolBox()->i18nLog()->warning('customer-not-found');
+            $this->counterpart = null;
             return false;
         }
 
         $subaccount = $this->getCustomerAccount($customer);
         if (!$subaccount->exists()) {
             $this->toolBox()->i18nLog()->warning('customer-account-not-found');
+            $this->counterpart = null;
             return false;
         }
 
+        $this->counterpart = $subaccount;
         return $this->addBasicLine($accountEntry, $subaccount, true);
     }
 
@@ -104,11 +120,9 @@ class InvoiceToAccounting extends AccountingClass
      */
     protected function addGoodsPurchaseLine($accountEntry)
     {
-        $document = $this->document->primaryColumnValue();
-        $purchaseAccount = $this->getSpecialSubAccount('COMPRA')->codsubcuenta;
-
-        $accountPurchases = new PurchasesDocLineAccount();
-        foreach ($accountPurchases->getTotalsForDocument($document, $purchaseAccount) as $code => $total) {
+        $purchaseAccount = $this->getSpecialSubAccount('COMPRA');
+        $tool = new PurchasesDocLineAccount();
+        foreach ($tool->getTotalsForDocument($this->document, $purchaseAccount->codsubcuenta) as $code => $total) {
             $subaccount = $this->getSubAccount($code);
             if (empty($subaccount->codsubcuenta)) {
                 $this->toolBox()->i18nLog()->warning('purchases-subaccount-not-found');
@@ -116,9 +130,8 @@ class InvoiceToAccounting extends AccountingClass
             }
 
             $line = $accountEntry->getNewLine();
-            $line->codsubcuenta = $subaccount->codsubcuenta;
+            $line->setAccount($subaccount);
             $line->debe = $total;
-            $line->idsubcuenta = $subaccount->idsubcuenta;
             if (!$line->save()) {
                 $this->toolBox()->i18nLog()->warning('good-purchases-line-error');
                 return false;
@@ -138,11 +151,9 @@ class InvoiceToAccounting extends AccountingClass
      */
     protected function addGoodsSalesLine($accountEntry)
     {
-        $document = $this->document->primaryColumnValue();
-        $salesAccount = $this->getSpecialSubAccount('VENTAS')->codsubcuenta;
-
-        $accountSales = new SalesDocLineAccount();
-        foreach ($accountSales->getTotalsForDocument($document, $salesAccount) as $code => $total) {
+        $salesAccount = $this->getSpecialSubAccount('VENTAS');
+        $tool = new SalesDocLineAccount();
+        foreach ($tool->getTotalsForDocument($this->document, $salesAccount->codsubcuenta) as $code => $total) {
             $subaccount = $this->getSubAccount($code);
             if (empty($subaccount->codsubcuenta)) {
                 $this->toolBox()->i18nLog()->warning('sales-subaccount-not-found');
@@ -150,9 +161,8 @@ class InvoiceToAccounting extends AccountingClass
             }
 
             $line = $accountEntry->getNewLine();
-            $line->codsubcuenta = $subaccount->codsubcuenta;
+            $line->setAccount($subaccount);
             $line->haber = $total;
-            $line->idsubcuenta = $subaccount->idsubcuenta;
             if (!$line->save()) {
                 $this->toolBox()->i18nLog()->warning('good-sales-line-error');
                 return false;
@@ -193,6 +203,27 @@ class InvoiceToAccounting extends AccountingClass
     }
 
     /**
+     *
+     * @param Asiento $accountEntry
+     *
+     * @return bool
+     */
+    protected function addPurchaseSuppliedLines($accountEntry)
+    {
+        if (empty($this->document->totalsuplidos)) {
+            return true;
+        }
+
+        $subaccount = $this->getSpecialSubAccount('SUPLI');
+        if (!$subaccount->exists()) {
+            $this->toolBox()->i18nLog()->warning('supplied-subaccount-not-found');
+            return false;
+        }
+
+        return $this->addBasicLine($accountEntry, $subaccount, true, $this->document->totalsuplidos);
+    }
+
+    /**
      * Add the purchase line to the accounting entry
      *
      * @param Asiento $accountEntry
@@ -211,7 +242,7 @@ class InvoiceToAccounting extends AccountingClass
                 return false;
             }
 
-            if (!$this->addTaxLine($accountEntry, $subaccount, true, $value)) {
+            if (!$this->addTaxLine($accountEntry, $subaccount, $this->counterpart, true, $value)) {
                 return false;
             }
         }
@@ -250,6 +281,28 @@ class InvoiceToAccounting extends AccountingClass
     }
 
     /**
+     * Add the supplied line to the accounting entry
+     *
+     * @param Asiento $accountEntry
+     *
+     * @return bool
+     */
+    protected function addSalesSuppliedLines($accountEntry): bool
+    {
+        if (empty($this->document->totalsuplidos)) {
+            return true;
+        }
+
+        $subaccount = $this->getSpecialSubAccount('SUPLI');
+        if (!$subaccount->exists()) {
+            $this->toolBox()->i18nLog()->warning('supplied-subaccount-not-found');
+            return false;
+        }
+
+        return $this->addBasicLine($accountEntry, $subaccount, false, $this->document->totalsuplidos);
+    }
+
+    /**
      * Add the sales line to the accounting entry
      *
      * @param Asiento $accountEntry
@@ -269,7 +322,7 @@ class InvoiceToAccounting extends AccountingClass
             }
 
             /// add tax line
-            if (!$this->addTaxLine($accountEntry, $subaccount, false, $value)) {
+            if (!$this->addTaxLine($accountEntry, $subaccount, $this->counterpart, false, $value)) {
                 return false;
             }
         }
@@ -287,15 +340,18 @@ class InvoiceToAccounting extends AccountingClass
         $supplier = new Proveedor();
         if (!$supplier->loadFromCode($this->document->codproveedor)) {
             $this->toolBox()->i18nLog()->warning('supplier-not-found');
+            $this->counterpart = null;
             return false;
         }
 
         $subaccount = $this->getSupplierAccount($supplier);
         if (!$subaccount->exists()) {
             $this->toolBox()->i18nLog()->warning('supplier-account-not-found');
+            $this->counterpart = null;
             return false;
         }
 
+        $this->counterpart = $subaccount;
         return $this->addBasicLine($accountEntry, $subaccount, false);
     }
 
@@ -306,7 +362,7 @@ class InvoiceToAccounting extends AccountingClass
      */
     protected function initialChecks(): bool
     {
-        if (!empty($this->document->idasiento)) {
+        if (!empty($this->document->idasiento) || empty($this->document->total)) {
             return false;
         }
 
@@ -349,7 +405,9 @@ class InvoiceToAccounting extends AccountingClass
         if ($this->addSupplierLine($accountEntry) &&
             $this->addPurchaseTaxLines($accountEntry) &&
             $this->addPurchaseIrpfLines($accountEntry) &&
-            $this->addGoodsPurchaseLine($accountEntry)) {
+            $this->addPurchaseSuppliedLines($accountEntry) &&
+            $this->addGoodsPurchaseLine($accountEntry) &&
+            $accountEntry->isBalanced()) {
             $this->document->idasiento = $accountEntry->primaryColumnValue();
             return;
         }
@@ -374,7 +432,9 @@ class InvoiceToAccounting extends AccountingClass
         if ($this->addCustomerLine($accountEntry) &&
             $this->addSalesTaxLines($accountEntry) &&
             $this->addSalesIrpfLines($accountEntry) &&
-            $this->addGoodsSalesLine($accountEntry)) {
+            $this->addSalesSuppliedLines($accountEntry) &&
+            $this->addGoodsSalesLine($accountEntry) &&
+            $accountEntry->isBalanced()) {
             $this->document->idasiento = $accountEntry->primaryColumnValue();
             return;
         }

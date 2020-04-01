@@ -19,8 +19,8 @@
 namespace FacturaScripts\Core\Model;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Lib\BusinessDocSubType;
-use FacturaScripts\Core\Lib\BusinessDocTypeOperation;
+use FacturaScripts\Dinamic\Lib\BusinessDocSubType;
+use FacturaScripts\Dinamic\Lib\BusinessDocTypeOperation;
 use FacturaScripts\Dinamic\Model\LineaFacturaCliente as DinLineaFactura;
 use FacturaScripts\Dinamic\Model\LiquidacionComision as DinLiquidacionComision;
 use FacturaScripts\Dinamic\Model\ReciboCliente as DinReciboCliente;
@@ -137,6 +137,11 @@ class FacturaCliente extends Base\SalesDocument
     {
         if (!parent::test()) {
             return false;
+        }
+
+        if ($this->codserie != $this->previousData['codserie']) {
+            /// prevent check date if serie is changed
+            return true;
         }
 
         /// prevent form using old dates

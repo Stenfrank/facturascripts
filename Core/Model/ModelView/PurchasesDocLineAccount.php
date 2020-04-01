@@ -20,6 +20,7 @@ namespace FacturaScripts\Core\Model\ModelView;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Core\Model\Base\ModelView;
+use FacturaScripts\Dinamic\Model\FacturaProveedor;
 use FacturaScripts\Dinamic\Model\Familia;
 
 /**
@@ -30,6 +31,7 @@ use FacturaScripts\Dinamic\Model\Familia;
  * 
  * @property string $codfamilia
  * @property string $codsubcuenta
+ * @property float  $total
  */
 class PurchasesDocLineAccount extends ModelView
 {
@@ -37,29 +39,63 @@ class PurchasesDocLineAccount extends ModelView
     /**
      * Get totals for subaccount of sale document
      *
-     * @param int    $document
-     * @param string $subaccount
+     * @param FacturaProveedor $document
+     * @param string           $defaultSubacode
      *
      * @return array
      */
-    public function getTotalsForDocument($document, $subaccount)
+    public function getTotalsForDocument($document, $defaultSubacode)
     {
-        $where = [new DataBaseWhere('lineasfacturasprov.idfactura', $document)];
+        $totals = [];
+
+        /// calculate total discount
+        $totalDto = 1.0;
+        foreach ([$document->dtopor1, $document->dtopor2] as $dto) {
+            $totalDto *= 1 - $dto / 100;
+        }
+
+        $where = [
+            new DataBaseWhere('lineasfacturasprov.idfactura', $document->idfactura),
+            new DataBaseWhere('lineasfacturasprov.suplido', false)
+        ];
         $order = [
-            'lineasfacturasprov.idfactura' => 'ASC',
             "COALESCE(productos.codsubcuentacom, '')" => 'ASC',
             "COALESCE(productos.codfamilia, '')" => 'ASC'
         ];
-
-        $totals = [];
         foreach ($this->all($where, $order) as $row) {
             $codSubAccount = empty($row->codsubcuenta) ? Familia::purchaseSubAccount($row->codfamilia) : $row->codsubcuenta;
             if (empty($codSubAccount)) {
-                $codSubAccount = $subaccount;
+                $codSubAccount = $defaultSubacode;
             }
 
-            $amount = $totals[$codSubAccount] ?? 0.00;
-            $totals[$codSubAccount] = $amount + $row->total;
+            $amount = $row->total * $totalDto;
+            $totals[$codSubAccount] = isset($totals[$codSubAccount]) ? $totals[$codSubAccount] + $amount : $amount;
+        }
+
+        return $this->checkTotals($totals, $document, $defaultSubacode);
+    }
+
+    /**
+     * 
+     * @param array            $totals
+     * @param FacturaProveedor $document
+     * @param string           $defaultSubacode
+     *
+     * @return array
+     */
+    protected function checkTotals(&$totals, $document, $defaultSubacode)
+    {
+        /// round and add the totals
+        $sum = 0.0;
+        foreach ($totals as $key => $value) {
+            $totals[$key] = \round($value, \FS_NF0);
+            $sum += $totals[$key];
+        }
+
+        /// fix occasional penny mismatch
+        if (!$this->toolBox()->utils()->floatcmp($document->neto, $sum, \FS_NF0, true)) {
+            $diff = \round($document->neto - $sum, \FS_NF0);
+            $totals[$defaultSubacode] = isset($totals[$defaultSubacode]) ? $totals[$defaultSubacode] + $diff : $diff;
         }
 
         return $totals;

@@ -19,6 +19,10 @@
 namespace FacturaScripts\Core\Model;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Dinamic\Lib\CostPriceTools;
+use FacturaScripts\Dinamic\Model\Divisa as DinDivisa;
+use FacturaScripts\Dinamic\Model\Proveedor as DinProveedor;
+use FacturaScripts\Dinamic\Model\Variante as DinVariante;
 
 /**
  * Description of ProductoProveedor
@@ -102,11 +106,11 @@ class ProductoProveedor extends Base\ModelClass
 
     /**
      * 
-     * @return Variante
+     * @return DinVariante
      */
     public function getVariant()
     {
-        $variant = new Variante();
+        $variant = new DinVariante();
         $where = [new DataBaseWhere('referencia', $this->referencia)];
         $variant->loadFromCode('', $where);
         return $variant;
@@ -114,13 +118,26 @@ class ProductoProveedor extends Base\ModelClass
 
     /**
      * 
-     * @return Proveedor
+     * @return DinProveedor
      */
     public function getSupplier()
     {
-        $supplier = new Proveedor();
+        $supplier = new DinProveedor();
         $supplier->loadFromCode($this->codproveedor);
         return $supplier;
+    }
+
+    /**
+     * 
+     * @return string
+     */
+    public function install()
+    {
+        /// needed dependencies
+        new DinDivisa();
+        new DinProveedor();
+
+        return parent::install();
     }
 
     /**
@@ -130,6 +147,20 @@ class ProductoProveedor extends Base\ModelClass
     public static function primaryColumn(): string
     {
         return 'id';
+    }
+
+    /**
+     * 
+     * @return bool
+     */
+    public function save()
+    {
+        if (parent::save()) {
+            CostPriceTools::update($this->getVariant());
+            return true;
+        }
+
+        return false;
     }
 
     /**

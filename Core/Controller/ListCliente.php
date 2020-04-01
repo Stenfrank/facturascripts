@@ -52,7 +52,27 @@ class ListCliente extends ListController
     {
         $this->createViewCustomers();
         $this->createViewContacts();
+        $this->createViewBankAccounts();
         $this->createViewGroups();
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewBankAccounts(string $viewName = 'ListCuentaBancoCliente')
+    {
+        $this->addView($viewName, 'CuentaBancoCliente', 'bank-accounts', 'fas fa-piggy-bank');
+        $this->addSearchFields($viewName, ['codcuenta', 'descripcion', 'iban', 'swift']);
+        $this->addOrderBy($viewName, ['codcuenta'], 'bank-mandate');
+        $this->addOrderBy($viewName, ['descripcion'], 'description');
+        $this->addOrderBy($viewName, ['iban'], 'iban');
+        $this->addOrderBy($viewName, ['fmandato', 'codcuenta'], 'bank-mandate-date', 2);
+
+        /// disable buttons
+        $this->setSettings($viewName, 'btnDelete', false);
+        $this->setSettings($viewName, 'btnNew', false);
+        $this->setSettings($viewName, 'checkBoxes', false);
     }
 
     /**
@@ -122,6 +142,9 @@ class ListCliente extends ListController
 
         $paymentMethods = $this->codeModel->all('formaspago', 'codpago', 'descripcion');
         $this->addFilterSelect($viewName, 'codpago', 'payment-methods', 'codpago', $paymentMethods);
+
+        $vatRegimes = $this->codeModel->all('clientes', 'regimeniva', 'regimeniva');
+        $this->addFilterSelect($viewName, 'regimeniva', 'vat-regime', 'regimeniva', $vatRegimes);
     }
 
     /**

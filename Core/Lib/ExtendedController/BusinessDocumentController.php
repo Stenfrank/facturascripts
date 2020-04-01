@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,7 +19,7 @@
 namespace FacturaScripts\Core\Lib\ExtendedController;
 
 use FacturaScripts\Core\Model\Base\BusinessDocumentLine;
-use FacturaScripts\Dinamic\Lib\BusinessDocumentTools;
+use FacturaScripts\Dinamic\Lib\BusinessDocumentFormTools;
 
 /**
  * Description of BusinessDocumentController
@@ -31,7 +31,7 @@ abstract class BusinessDocumentController extends PanelController
 
     /**
      *
-     * @var BusinessDocumentTools
+     * @var BusinessDocumentFormTools
      */
     protected $documentTools;
 
@@ -65,6 +65,11 @@ abstract class BusinessDocumentController extends PanelController
     abstract public function getNewSubjectUrl();
 
     /**
+     * Returns the name of the XMLView file for lines.
+     */
+    abstract protected function getLineXMLView();
+
+    /**
      * Sets subject for this document.
      *
      * @param mixed $view
@@ -81,7 +86,7 @@ abstract class BusinessDocumentController extends PanelController
     public function __construct(string $className, string $uri = '')
     {
         parent::__construct($className, $uri);
-        $this->documentTools = new BusinessDocumentTools();
+        $this->documentTools = new BusinessDocumentFormTools();
     }
 
     /**
@@ -96,6 +101,7 @@ abstract class BusinessDocumentController extends PanelController
         $fullModelName = self::MODEL_NAMESPACE . $this->getModelClassName();
         $view = new BusinessDocumentView($this->getLineXMLView(), 'new', $fullModelName);
         $this->addCustomView($view->getViewName(), $view);
+        $this->setSettings($view->getViewName(), 'btnPrint', true);
 
         /// edit tab
         $viewName = 'Edit' . $this->getModelClassName();
@@ -162,16 +168,6 @@ abstract class BusinessDocumentController extends PanelController
         }
 
         return $data;
-    }
-
-    /**
-     * Return the name of the xml file with the column configuration por lines.
-     *
-     * @return string
-     */
-    protected function getLineXMLView()
-    {
-        return 'BusinessDocumentLine';
     }
 
     /**

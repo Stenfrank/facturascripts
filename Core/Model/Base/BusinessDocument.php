@@ -20,6 +20,7 @@ namespace FacturaScripts\Core\Model\Base;
 
 use FacturaScripts\Dinamic\Lib\BusinessDocumentCode;
 use FacturaScripts\Dinamic\Model\Almacen;
+use FacturaScripts\Dinamic\Model\Divisa;
 use FacturaScripts\Dinamic\Model\Ejercicio;
 use FacturaScripts\Dinamic\Model\Empresa;
 use FacturaScripts\Dinamic\Model\Serie;
@@ -31,6 +32,8 @@ use FacturaScripts\Dinamic\Model\Serie;
  */
 abstract class BusinessDocument extends ModelOnChangeClass
 {
+
+    use ExerciseRelationTrait;
 
     /**
      * VAT number of the customer or supplier.
@@ -52,13 +55,6 @@ abstract class BusinessDocument extends ModelOnChangeClass
      * @var string
      */
     public $coddivisa;
-
-    /**
-     * Related accounting exercise. The one that corresponds to the date.
-     *
-     * @var string
-     */
-    public $codejercicio;
 
     /**
      * Unique identifier for humans.
@@ -210,6 +206,13 @@ abstract class BusinessDocument extends ModelOnChangeClass
     public $totalrecargo;
 
     /**
+     * Total sum of supplied lines.
+     *
+     * @var float|int
+     */
+    public $totalsuplidos;
+
+    /**
      * Returns the lines associated with the document.
      */
     abstract public function getLines();
@@ -268,11 +271,13 @@ abstract class BusinessDocument extends ModelOnChangeClass
         $this->irpf = 0.0;
         $this->neto = 0.0;
         $this->netosindto = 0.0;
+        $this->numero = 1;
         $this->total = 0.0;
         $this->totaleuros = 0.0;
         $this->totalirpf = 0.0;
         $this->totaliva = 0.0;
         $this->totalrecargo = 0.0;
+        $this->totalsuplidos = 0.0;
     }
 
     /**
@@ -299,6 +304,7 @@ abstract class BusinessDocument extends ModelOnChangeClass
         new Serie();
         new Ejercicio();
         new Almacen();
+        new Divisa();
 
         return parent::install();
     }
@@ -389,8 +395,15 @@ abstract class BusinessDocument extends ModelOnChangeClass
         $utils = $this->toolBox()->utils();
         $this->observaciones = $utils->noHtml($this->observaciones);
 
+        /// check number
+        if ((int) $this->numero < 1) {
+            $this->toolBox()->i18nLog()->error('invalid-number');
+            return false;
+        }
+
         /// check total
-        if (!$utils->floatcmp($this->total, $this->neto + $this->totaliva - $this->totalirpf + $this->totalrecargo, FS_NF0, true)) {
+        $total = $this->neto + $this->totalsuplidos + $this->totaliva - $this->totalirpf + $this->totalrecargo;
+        if (!$utils->floatcmp($this->total, $total, \FS_NF0, true)) {
             $this->toolBox()->i18nLog()->error('bad-total-error');
             return false;
         }
@@ -400,7 +413,7 @@ abstract class BusinessDocument extends ModelOnChangeClass
          * or convert amounts in several currencies. For this reason we need
          * many decimals.
          */
-        $this->totaleuros = empty($this->tasaconv) ? 0 : round($this->total / $this->tasaconv, 5);
+        $this->totaleuros = empty($this->tasaconv) ? 0 : \round($this->total / $this->tasaconv, 5);
 
         return parent::test();
     }
@@ -432,6 +445,10 @@ abstract class BusinessDocument extends ModelOnChangeClass
                     BusinessDocumentCode::getNewCode($this);
                 }
                 break;
+
+            case 'numero':
+                BusinessDocumentCode::getNewCode($this, false);
+                break;
         }
 
         return parent::onChange($field);
@@ -446,9 +463,9 @@ abstract class BusinessDocument extends ModelOnChangeClass
     {
         $more = [
             'codalmacen', 'coddivisa', 'codpago', 'codserie',
-            'fecha', 'hora', 'idempresa', 'total'
+            'fecha', 'hora', 'idempresa', 'numero', 'total'
         ];
-        parent::setPreviousData(array_merge($more, $fields));
+        parent::setPreviousData(\array_merge($more, $fields));
     }
 
     /**

@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018-2019 Carlos García Gómez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2020 Carlos García Gómez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -17,6 +17,10 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 namespace FacturaScripts\Core\Model;
+
+use FacturaScripts\Dinamic\Model\AtributoValor as DinAtributoValor;
+use FacturaScripts\Dinamic\Model\Producto as DinProducto;
+use FacturaScripts\Dinamic\Model\Stock as DinStock;
 
 /**
  * Define method and attributes of table variantes.
@@ -56,6 +60,20 @@ class Variante extends Base\ModelClass
      * @var int
      */
     public $idatributovalor2;
+
+    /**
+     * Foreign key of table atributo_valores.
+     *
+     * @var int
+     */
+    public $idatributovalor3;
+
+    /**
+     * Foreign key of table atributo_valores.
+     *
+     * @var int
+     */
+    public $idatributovalor4;
 
     /**
      * Product identifier.
@@ -116,16 +134,22 @@ class Variante extends Base\ModelClass
         $field = empty($fieldcode) ? $this->primaryColumn() : $fieldcode;
         $find = $this->toolBox()->utils()->noHtml(mb_strtolower($query, 'UTF8'));
 
-        $sql = "SELECT v." . $field . " AS code, p.descripcion AS description, v.idatributovalor1, v.idatributovalor2"
-            . " FROM " . self::tableName() . " v"
-            . " LEFT JOIN " . Producto::tableName() . " p ON v.idproducto = p.idproducto"
+        $sql = "SELECT v." . $field . " AS code, p.descripcion AS description, v.idatributovalor1, v.idatributovalor2, v.idatributovalor3, v.idatributovalor4"
+            . " FROM " . static::tableName() . " v"
+            . " LEFT JOIN " . DinProducto::tableName() . " p ON v.idproducto = p.idproducto"
             . " WHERE LOWER(v.referencia) LIKE '" . $find . "%'"
             . " OR v.codbarras = '" . $find . "'"
             . " OR LOWER(p.descripcion) LIKE '%" . $find . "%'"
             . " ORDER BY v." . $field . " asc";
 
         foreach (self::$dataBase->selectLimit($sql, CodeModel::ALL_LIMIT) as $data) {
-            $data['description'] = $this->getAttributeDescription($data['idatributovalor1'], $data['idatributovalor2'], $data['description']);
+            $data['description'] = $this->getAttributeDescription(
+                $data['idatributovalor1'],
+                $data['idatributovalor2'],
+                $data['idatributovalor3'],
+                $data['idatributovalor4'],
+                $data['description']
+            );
             $results[] = new CodeModel($data);
         }
 
@@ -139,7 +163,13 @@ class Variante extends Base\ModelClass
     public function description(bool $onlyAttributes = false)
     {
         $description = $onlyAttributes ? '' : $this->getProducto()->descripcion;
-        return $this->getAttributeDescription($this->idatributovalor1, $this->idatributovalor2, $description);
+        return $this->getAttributeDescription(
+                $this->idatributovalor1,
+                $this->idatributovalor2,
+                $this->idatributovalor3,
+                $this->idatributovalor4,
+                $description
+        );
     }
 
     /**
@@ -148,8 +178,7 @@ class Variante extends Base\ModelClass
      */
     public function delete()
     {
-        $product = $this->getProducto();
-        if ($this->referencia == $product->referencia) {
+        if ($this->referencia == $this->getProducto()->referencia) {
             $this->toolBox()->i18nLog()->warning('you-cant-delete-primary-variant');
             return false;
         }
@@ -159,19 +188,21 @@ class Variante extends Base\ModelClass
 
     /**
      * 
-     * @param int    $idatributoval1
-     * @param int    $idatributoval2
+     * @param int    $idAttVal1
+     * @param int    $idAttVal2
+     * @param int    $idAttVal3
+     * @param int    $idAttVal4
      * @param string $description
      * @param string $separator1
      * @param string $separator2
      *
      * @return string
      */
-    protected function getAttributeDescription($idatributoval1, $idatributoval2, $description = '', $separator1 = "\n", $separator2 = ', ')
+    protected function getAttributeDescription($idAttVal1, $idAttVal2, $idAttVal3, $idAttVal4, $description = '', $separator1 = "\n", $separator2 = ', ')
     {
-        $atributeValue = new AtributoValor();
+        $atributeValue = new DinAtributoValor();
         $extra = [];
-        foreach ([$idatributoval1, $idatributoval2] as $id) {
+        foreach ([$idAttVal1, $idAttVal2, $idAttVal3, $idAttVal4] as $id) {
             if (!empty($id) && $atributeValue->loadFromCode($id)) {
                 $extra[] = $atributeValue->descripcion;
             }
@@ -179,10 +210,10 @@ class Variante extends Base\ModelClass
 
         /// compose text
         if (empty($description)) {
-            return implode($separator2, $extra);
+            return \implode($separator2, $extra);
         }
 
-        return empty($extra) ? $description : implode($separator1, [$description, implode($separator2, $extra)]);
+        return empty($extra) ? $description : \implode($separator1, [$description, \implode($separator2, $extra)]);
     }
 
     /**
@@ -192,7 +223,7 @@ class Variante extends Base\ModelClass
      */
     public function getProducto()
     {
-        $producto = new Producto();
+        $producto = new DinProducto();
         $producto->loadFromCode($this->idproducto);
         return $producto;
     }
@@ -206,10 +237,19 @@ class Variante extends Base\ModelClass
      */
     public function install()
     {
-        new Producto();
-        new AtributoValor();
+        new DinProducto();
+        new DinAtributoValor();
 
         return parent::install();
+    }
+
+    /**
+     * 
+     * @return float
+     */
+    public function priceWithTax()
+    {
+        return $this->precio * (100 + $this->getProducto()->getTax()->iva) / 100;
     }
 
     /**
@@ -246,6 +286,16 @@ class Variante extends Base\ModelClass
     }
 
     /**
+     * 
+     * @param float $price
+     */
+    public function setPriceWithTax($price)
+    {
+        $newPrice = (100 * $price) / (100 + $this->getProducto()->getTax()->iva);
+        $this->precio = \round($newPrice, DinProducto::ROUND_DECIMALS);
+    }
+
+    /**
      * Returns the name of the table that uses this model.
      *
      * @return string
@@ -263,7 +313,7 @@ class Variante extends Base\ModelClass
     {
         $utils = $this->toolBox()->utils();
         $this->referencia = $utils->noHtml($this->referencia);
-        if (strlen($this->referencia) < 1 || strlen($this->referencia) > 30) {
+        if (\strlen($this->referencia) < 1 || \strlen($this->referencia) > 30) {
             $this->toolBox()->i18nLog()->warning(
                 'invalid-column-lenght',
                 ['%value%' => $this->referencia, '%column%' => 'referencia', '%min%' => '1', '%max%' => '30']
@@ -286,7 +336,7 @@ class Variante extends Base\ModelClass
     {
         switch ($type) {
             case 'edit':
-                return is_null($this->idproducto) ? 'EditProducto' : 'EditProducto?code=' . $this->idproducto;
+                return \is_null($this->idproducto) ? 'EditProducto' : 'EditProducto?code=' . $this->idproducto;
 
             case 'list':
                 return $list . 'Producto';
@@ -310,7 +360,7 @@ class Variante extends Base\ModelClass
         if (parent::saveInsert($values)) {
             /// set new stock?
             if ($this->stockfis != 0.0) {
-                $stock = new Stock();
+                $stock = new DinStock();
                 $stock->cantidad = $this->stockfis;
                 $stock->codalmacen = $this->toolBox()->appSettings()->get('default', 'codalmacen');
                 $stock->idproducto = $this->idproducto;

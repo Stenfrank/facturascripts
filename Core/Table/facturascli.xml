@@ -219,6 +219,11 @@
         <name>totalrecargo</name>
         <type>double precision</type>
     </column>
+    <column>
+        <name>totalsuplidos</name>
+        <type>double precision</type>
+        <default>0</default>
+    </column>
     <constraint>
         <name>facturascli_pkey</name>
         <type>PRIMARY KEY (idfactura)</type>
@@ -234,6 +239,10 @@
     <constraint>
         <name>ca_facturascli_clientes</name>
         <type>FOREIGN KEY (codcliente) REFERENCES clientes (codcliente) ON DELETE RESTRICT ON UPDATE CASCADE</type>
+    </constraint>
+    <constraint>
+        <name>ca_facturascli_divisas</name>
+        <type>FOREIGN KEY (coddivisa) REFERENCES divisas (coddivisa) ON DELETE RESTRICT ON UPDATE CASCADE</type>
     </constraint>
     <constraint>
         <name>ca_facturascli_ejercicios</name>

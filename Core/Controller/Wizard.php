@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -24,6 +24,7 @@ use FacturaScripts\Core\Base\Controller;
 use FacturaScripts\Core\Base\ControllerPermissions;
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Core\Base\PluginManager;
+use FacturaScripts\Dinamic\Lib\Accounting\AccountingPlanImport;
 use FacturaScripts\Dinamic\Model;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -45,7 +46,7 @@ class Wizard extends Controller
     {
         $pluginManager = new PluginManager();
         $installedPlugins = $pluginManager->installedPlugins();
-        if (!defined('FS_HIDDEN_PLUGINS')) {
+        if (false === \defined('FS_HIDDEN_PLUGINS')) {
             return $installedPlugins;
         }
 
@@ -214,18 +215,48 @@ class Wizard extends Controller
         $pluginManager->deploy(true, true);
 
         $hiddenPlugins = \explode(',', \FS_HIDDEN_PLUGINS);
-        if (is_array($hiddenPlugins)) {
+        if (\is_array($hiddenPlugins)) {
             foreach ($hiddenPlugins as $pluginName) {
                 $pluginManager->enable($pluginName);
             }
         }
 
         $plugins = $this->request->request->get('plugins', []);
-        if (is_array($plugins)) {
+        if (\is_array($plugins)) {
             foreach ($plugins as $pluginName) {
                 $pluginManager->enable($pluginName);
             }
         }
+    }
+
+    /**
+     * Loads the default accounting plan. If there is one.
+     * 
+     * @param string $codpais
+     *
+     * @return bool
+     */
+    private function loadDefaultAccountingPlan(string $codpais)
+    {
+        /// Is there a default accounting plan?
+        $filePath = \FS_FOLDER . '/Dinamic/Data/Codpais/' . $codpais . '/defaultPlan.csv';
+        if (false === \file_exists($filePath)) {
+            return false;
+        }
+
+        /// Does an accounting plan already exist?
+        $cuenta = new Model\Cuenta();
+        if ($cuenta->count() > 0 || $this->dataBase->tableExists('co_cuentas')) {
+            return false;
+        }
+
+        $exerciseModel = new Model\Ejercicio();
+        foreach ($exerciseModel->all() as $exercise) {
+            $planImport = new AccountingPlanImport();
+            return $planImport->importCSV($filePath, $exercise->codejercicio);
+        }
+
+        return false;
     }
 
     /**
@@ -236,14 +267,13 @@ class Wizard extends Controller
     private function preSetAppSettings(string $codpais)
     {
         $filePath = \FS_FOLDER . '/Dinamic/Data/Codpais/' . $codpais . '/default.json';
-        if (!file_exists($filePath)) {
+        if (false === \file_exists($filePath)) {
             return;
         }
 
         $appSettings = $this->toolBox()->appSettings();
-
-        $fileContent = file_get_contents($filePath);
-        $defaultValues = json_decode($fileContent, true) ?? [];
+        $fileContent = \file_get_contents($filePath);
+        $defaultValues = \json_decode($fileContent, true) ?? [];
         foreach ($defaultValues as $group => $values) {
             foreach ($values as $key => $value) {
                 $appSettings->set($group, $key, $value);
@@ -273,6 +303,7 @@ class Wizard extends Controller
         $this->empresa->provincia = $this->request->request->get('provincia', '');
         $this->empresa->telefono1 = $this->request->request->get('telefono1', '');
         $this->empresa->telefono2 = $this->request->request->get('telefono2', '');
+        $this->empresa->tipoidfiscal = $appSettings->get('default', 'tipoidfiscal');
         $this->empresa->save();
 
         /// assignes warehouse?
@@ -372,6 +403,8 @@ class Wizard extends Controller
         if ('' !== $email && !$this->saveEmail($email)) {
             return;
         }
+
+        $this->loadDefaultAccountingPlan($codpais);
 
         /// change user homepage
         $this->user->homepage = $this->dataBase->tableExists('fs_users') ? 'AdminPlugins' : 'ListFacturaCliente';

@@ -46,7 +46,7 @@
         </column>
         <column name="status" display="none" order="160">
             <widget type="autocomplete" fieldname="idestado">
-                <values source="estados_documentos" fieldcode="idestado" fieldtitle="nombre"></values>
+                <values source="estados_documentos" fieldcode="idestado" fieldtitle="nombre" />
             </widget>
         </column>
         <column name="email-sent" display="center" order="170">
@@ -59,10 +59,10 @@
             <widget type="money" fieldname="netosindto" />
         </column>
         <column name="global-dto" display="none" order="190">
-            <widget type="number" fieldname="dtopor1" />
+            <widget type="percentage" fieldname="dtopor1" />
         </column>
         <column name="global-dto-2" display="none" order="200">
-            <widget type="number" fieldname="dtopor2" />
+            <widget type="percentage" fieldname="dtopor2" />
         </column>
         <column name="net" display="none" order="210">
             <widget type="money" fieldname="neto" />
@@ -74,7 +74,7 @@
             <widget type="money" fieldname="totalrecargo" />
         </column>
         <column name="retention" display="none" order="240">
-            <widget type="number" fieldname="irpf" />
+            <widget type="percentage" fieldname="irpf" />
         </column>
         <column name="retentions" display="none" order="250">
             <widget type="money" fieldname="totalirpf" />
@@ -86,7 +86,7 @@
         </column>
         <column name="agent" display="none" order="270">
             <widget type="autocomplete" fieldname="codagente">
-                <values source="agentes" fieldcode="codagente" fieldtitle="nombre"></values>
+                <values source="agentes" fieldcode="codagente" fieldtitle="nombre" />
             </widget>
         </column>
         <column name="commission" display="none" order="280">
@@ -103,6 +103,7 @@
             <option color="success" fieldname="pagada">1</option>
             <option color="warning" fieldname="editable">0</option>
             <option color="info" fieldname="femail">notnull:</option>
+            <option color="dark" fieldname="idasiento">null:</option>
         </row>
     </rows>
 </view>

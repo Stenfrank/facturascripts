@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -62,8 +62,7 @@ abstract class AccountingClass extends AccountingAccounts
      */
     protected function addBasicLine($accountEntry, $subaccount, $isDebit, $amount = null): bool
     {
-        $line = $this->getBasicLine($accountEntry, $subaccount, $isDebit, $amount);
-        return $line->save();
+        return $this->getBasicLine($accountEntry, $subaccount, $isDebit, $amount)->save();
     }
 
     /**
@@ -72,16 +71,22 @@ abstract class AccountingClass extends AccountingAccounts
      *
      * @param Asiento   $accountEntry
      * @param Subcuenta $subaccount
+     * @param Subcuenta $counterpart
      * @param bool      $isDebit
      * @param array     $values
      *
      * @return bool
      */
-    protected function addTaxLine($accountEntry, $subaccount, $isDebit, $values): bool
+    protected function addTaxLine($accountEntry, $subaccount, $counterpart, $isDebit, $values): bool
     {
         /// add basic data
         $amount = (float) $values['totaliva'] + (float) $values['totalrecargo'];
         $line = $this->getBasicLine($accountEntry, $subaccount, $isDebit, $amount);
+
+        /// counterpart?
+        if (!empty($counterpart)) {
+            $line->setCounterpart($counterpart);
+        }
 
         /// add tax register data
         $line->baseimponible = (float) $values['neto'];
@@ -109,8 +114,7 @@ abstract class AccountingClass extends AccountingAccounts
     protected function getBasicLine($accountEntry, $subaccount, $isDebit, $amount = null)
     {
         $line = $accountEntry->getNewLine();
-        $line->idsubcuenta = $subaccount->idsubcuenta;
-        $line->codsubcuenta = $subaccount->codsubcuenta;
+        $line->setAccount($subaccount);
 
         $total = ($amount === null) ? $this->document->total : $amount;
         if ($isDebit) {

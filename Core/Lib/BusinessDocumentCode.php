@@ -31,36 +31,29 @@ use FacturaScripts\Dinamic\Model\SecuenciaDocumento;
 class BusinessDocumentCode
 {
 
-    const GAP_LIMIT = 100;
+    const GAP_LIMIT = 1000;
 
     /**
      * Generates a new identifier for humans from a document.
      *
      * @param BusinessDocument $document
+     * @param bool             $newNumber
      */
-    public static function getNewCode(&$document)
+    public static function getNewCode(&$document, $newNumber = true)
     {
         $sequence = static::getSequence($document);
-
-        /**
-         * Fix sequence start number.
-         * TODO: remove after version 2020.5
-         */
-        if (empty($sequence->inicio)) {
-            $sequence->inicio = 1;
+        if ($newNumber) {
+            $document->numero = static::getNewNumber($sequence, $document);
         }
 
-        $document->numero = static::getNewNumber($sequence, $document);
-        $vars = [
+        $document->codigo = \strtr($sequence->patron, [
             '{EJE}' => $document->codejercicio,
             '{EJE2}' => \substr($document->codejercicio, -2),
             '{SERIE}' => $document->codserie,
             '{0SERIE}' => \str_pad($document->codserie, 2, '0', \STR_PAD_LEFT),
             '{NUM}' => $document->numero,
-            '{0NUM}' => \str_pad($document->numero, $sequence->longnumero, '0', \STR_PAD_LEFT),
-        ];
-
-        $document->codigo = \strtr($sequence->patron, $vars);
+            '{0NUM}' => \str_pad($document->numero, $sequence->longnumero, '0', \STR_PAD_LEFT)
+        ]);
     }
 
     /**

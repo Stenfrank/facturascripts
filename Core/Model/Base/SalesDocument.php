@@ -195,14 +195,13 @@ abstract class SalesDocument extends TransformerDocument
         $where2 = [new DataBaseWhere('codbarras', $this->toolBox()->utils()->noHtml($reference))];
         if ($variant->loadFromCode('', $where1) || $variant->loadFromCode('', $where2)) {
             $product = $variant->getProducto();
-            $impuesto = $product->getImpuesto();
 
-            $newLine->codimpuesto = $impuesto->codimpuesto;
+            $newLine->codimpuesto = $product->getTax()->codimpuesto;
             $newLine->descripcion = $variant->description();
             $newLine->idproducto = $product->idproducto;
-            $newLine->iva = $impuesto->iva;
+            $newLine->iva = $product->getTax()->iva;
             $newLine->pvpunitario = isset($this->tarifa) ? $this->tarifa->apply($variant->coste, $variant->precio) : $variant->precio;
-            $newLine->recargo = $impuesto->recargo;
+            $newLine->recargo = $product->getTax()->recargo;
             $newLine->referencia = $variant->referencia;
 
             /// allow extensions
@@ -340,6 +339,51 @@ abstract class SalesDocument extends TransformerDocument
 
     /**
      * 
+     * @param string $field
+     *
+     * @return bool
+     */
+    protected function onChange($field)
+    {
+        if (!parent::onChange($field)) {
+            return false;
+        }
+
+        switch ($field) {
+            /// if address is changed and customer billing address is empty, then save new values
+            case 'direccion':
+                $contact = new Contacto();
+                if ($contact->loadFromCode($this->idcontactofact) && empty($contact->direccion)) {
+                    $contact->apartado = $this->apartado;
+                    $contact->ciudad = $this->ciudad;
+                    $contact->codpais = $this->codpais;
+                    $contact->codpostal = $this->codpostal;
+                    $contact->direccion = $this->direccion;
+                    $contact->provincia = $this->provincia;
+                    $contact->save();
+                }
+                break;
+
+            /// if billing address is changed, then change all billing fields
+            case 'idcontactofact':
+                $contact = new Contacto();
+                if ($contact->loadFromCode($this->idcontactofact)) {
+                    $this->apartado = $contact->apartado;
+                    $this->ciudad = $contact->ciudad;
+                    $this->codpais = $contact->codpais;
+                    $this->codpostal = $contact->codpostal;
+                    $this->direccion = $contact->direccion;
+                    $this->provincia = $contact->provincia;
+                    return true;
+                }
+                return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 
      * @param Contacto $subject
      *
      * @return bool
@@ -420,7 +464,7 @@ abstract class SalesDocument extends TransformerDocument
      */
     protected function setPreviousData(array $fields = [])
     {
-        $more = ['codcliente'];
+        $more = ['codcliente', 'direccion', 'idcontactofact'];
         parent::setPreviousData(array_merge($more, $fields));
     }
 }

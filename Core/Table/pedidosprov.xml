@@ -140,6 +140,11 @@
         <name>totalrecargo</name>
         <type>double precision</type>
     </column>
+    <column>
+        <name>totalsuplidos</name>
+        <type>double precision</type>
+        <default>0</default>
+    </column>
     <constraint>
         <name>pedidosprov_pkey</name>
         <type>PRIMARY KEY (idpedido)</type>
@@ -147,6 +152,10 @@
     <constraint>
         <name>ca_pedidosprov_almacenes</name>
         <type>FOREIGN KEY (codalmacen) REFERENCES almacenes (codalmacen) ON DELETE RESTRICT ON UPDATE CASCADE</type>
+    </constraint>
+    <constraint>
+        <name>ca_pedidosprov_divisas</name>
+        <type>FOREIGN KEY (coddivisa) REFERENCES divisas (coddivisa) ON DELETE RESTRICT ON UPDATE CASCADE</type>
     </constraint>
     <constraint>
         <name>ca_pedidosprov_ejercicios</name>

@@ -97,6 +97,7 @@ class ListCuenta extends ListController
         /// disable buttons
         $this->setSettings($viewName, 'btnDelete', false);
         $this->setSettings($viewName, 'btnNew', false);
+        $this->setSettings($viewName, 'checkBoxes', false);
 
         /// add restore button
         if ($this->user->admin) {
@@ -150,5 +151,7 @@ class ListCuenta extends ListController
         if (!empty($sql)) {
             $this->dataBase->exec($sql);
         }
+
+        $this->toolBox()->i18nLog()->notice('record-updated-correctly');
     }
 }
