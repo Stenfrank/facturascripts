@@ -35,7 +35,14 @@ class RegularizacionImpuesto extends Base\ModelClass
 {
 
     use Base\ModelTrait;
+    use Base\AccEntryRelationTrait;
     use Base\ExerciseRelationTrait;
+
+    /**
+     *
+     * @var bool
+     */
+    public $bloquear;
 
     /**
      * Code, not ID, of the related sub-account.
@@ -73,13 +80,6 @@ class RegularizacionImpuesto extends Base\ModelClass
     public $fechainicio;
 
     /**
-     * ID of the generated accounting entry.
-     *
-     * @var int
-     */
-    public $idasiento;
-
-    /**
      * Foreign Key with Empresas table.
      *
      * @var int
@@ -114,6 +114,12 @@ class RegularizacionImpuesto extends Base\ModelClass
      */
     public $periodo;
 
+    public function clear()
+    {
+        parent::clear();
+        $this->bloquear = false;
+    }
+
     /**
      * Deletes the regularization of VAT from the database.
      *
@@ -122,9 +128,9 @@ class RegularizacionImpuesto extends Base\ModelClass
     public function delete()
     {
         if (parent::delete()) {
-            $asiento = $this->getAsiento();
-            if ($asiento->exists()) {
-                $asiento->delete();
+            $accEntry = $this->getAccountingEntry();
+            if ($accEntry->exists()) {
+                $accEntry->delete();
             }
 
             return true;
@@ -134,24 +140,13 @@ class RegularizacionImpuesto extends Base\ModelClass
     }
 
     /**
-     *
-     * @return DinAsiento
-     */
-    public function getAsiento()
-    {
-        $asiento = new DinAsiento();
-        $asiento->loadFromCode($this->idasiento);
-        return $asiento;
-    }
-
-    /**
      * Returns the items per accounting entry.
      *
      * @return DinPartida[]
      */
     public function getPartidas()
     {
-        return $this->getAsiento()->getLines();
+        return $this->getAccountingEntry()->getLines();
     }
 
     /**
@@ -267,16 +262,16 @@ class RegularizacionImpuesto extends Base\ModelClass
         // return periods values
         switch ($period) {
             case 'T2':
-                return ['start' => date('01-04-' . $year), 'end' => date('30-06-' . $year)];
+                return ['start' => \date('01-04-' . $year), 'end' => \date('30-06-' . $year)];
 
             case 'T3':
-                return ['start' => date('01-07-' . $year), 'end' => date('30-09-' . $year)];
+                return ['start' => \date('01-07-' . $year), 'end' => \date('30-09-' . $year)];
 
             case 'T4':
-                return ['start' => date('01-10-' . $year), 'end' => date('31-12-' . $year)];
+                return ['start' => \date('01-10-' . $year), 'end' => \date('31-12-' . $year)];
 
             default:
-                return ['start' => date('01-01-' . $year), 'end' => date('31-03-' . $year)];
+                return ['start' => \date('01-01-' . $year), 'end' => \date('31-03-' . $year)];
         }
     }
 
